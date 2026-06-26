@@ -19,8 +19,8 @@ Reads `~/.codex/auth.json` and calls the same internal endpoints used by the des
 
 ## Install
 
-1. Open the `Codex Reset Check.alfredworkflow` file.
-2. Let Alfred import the workflow.
+1. Download the latest `.alfredworkflow` from the [Releases page](https://github.com/g17ui/codex-reset-check/releases/latest).
+2. Open the downloaded file to let Alfred import the workflow.
 3. Trigger Alfred and type `codexreset`.
 
 Each trigger performs a fresh request and returns the latest available data.
@@ -29,7 +29,7 @@ Each trigger performs a fresh request and returns the latest available data.
 
 ```
 .
-├── Codex Reset Check.alfredworkflow   # distributable workflow package
+├── .github/workflows/release.yml      # CI: automatic release on tag push
 ├── README.md
 └── workflow
     ├── codex_reset.py                  # main workflow logic
