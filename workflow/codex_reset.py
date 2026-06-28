@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from base64 import urlsafe_b64decode
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -25,7 +26,10 @@ def load_auth() -> tuple[str, str | None]:
 
 def decode_jwt_account_id(token: str) -> str | None:
     try:
-        payload_b64 = token.split(".")[1]
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        payload_b64 = parts[1]
         padding = -len(payload_b64) % 4
         if padding:
             payload_b64 += "=" * padding
@@ -62,7 +66,7 @@ def format_duration(seconds: Any) -> str:
     if seconds is None:
         return "unknown"
 
-    total_seconds = max(0, int(seconds))
+    total_seconds = max(0, int(round(seconds)))
     days, remainder = divmod(total_seconds, 86400)
     hours, remainder = divmod(remainder, 3600)
     minutes, _ = divmod(remainder, 60)
@@ -182,13 +186,9 @@ def build_credit_items(credits: list[dict[str, Any]], now: datetime) -> list[dic
 
 def build_updated_item(now: datetime) -> dict[str, Any]:
     local_now = now.astimezone()
-    if local_now.date() == datetime.now().astimezone().date():
-        subtitle = local_now.strftime("Today at %H:%M")
-    else:
-        subtitle = local_now.strftime("%b %-d, %H:%M")
     return {
         "title": "Last updated",
-        "subtitle": subtitle,
+        "subtitle": local_now.strftime("%H:%M:%S"),
         "valid": False,
     }
 
@@ -211,17 +211,17 @@ def fetch_usage_and_credits(headers: dict[str, str]) -> tuple[dict[str, Any] | N
     except HTTPError as error:
         if error.code == 401:
             output_message("Session expired", "Sign in to Codex Desktop again and rerun the workflow.")
-            raise SystemExit
+            raise SystemExit(0)
         if error.code == 429:
             output_message("Rate limited", "Try the workflow again in a moment.")
-            raise SystemExit
-    except Exception:
-        pass
+            raise SystemExit(0)
+    except Exception as exc:
+        print(f"[codex_reset] Warning: failed to fetch usage: {exc}", file=sys.stderr)
 
     try:
         reset_data = fetch_json(RESET_CREDITS_URL, headers)
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[codex_reset] Warning: failed to fetch reset credits: {exc}", file=sys.stderr)
 
     return usage, reset_data
 
@@ -240,16 +240,17 @@ def main() -> None:
     headers = get_headers(token, effective_account_id)
     usage, reset_data = fetch_usage_and_credits(headers)
 
+    now = datetime.now(timezone.utc)
+
     if not usage and not reset_data:
         output_message("Unable to fetch Codex data", "Check your network connection and try the workflow again.")
         return
 
-    now = datetime.now(timezone.utc)
     credits = reset_data.get("credits", []) if reset_data else []
     available_credits = [credit for credit in credits if is_available_credit(credit)]
 
     available_count = 0
-    if reset_data:
+    if reset_data is not None:
         available_count = int(reset_data.get("available_count", len(available_credits)) or 0)
     elif usage:
         available_count = int(usage.get("rate_limit_reset_credits", {}).get("available_count", 0) or 0)
